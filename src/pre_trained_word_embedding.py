@@ -94,6 +94,6 @@ print(model.summary())
 # fit the model
 model.fit(padded_docs_train, label_train, epochs=2, verbose=0)
 # evaluate the model
-padded_docs_test = get_padded_docs(doc_test)
+padded_docs_test, _ = get_padded_docs(doc_test)
 loss, accuracy = model.evaluate(padded_docs_test, label_test, verbose=0)
 print('Accuracy: %f' % (accuracy*100))
