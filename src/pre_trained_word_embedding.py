@@ -1,99 +1,170 @@
 from numpy import asarray
 from numpy import zeros
-from keras.preprocessing.text import Tokenizer, text_to_word_sequence
+from keras.preprocessing.text import Tokenizer, maketrans
 from keras.preprocessing.sequence import pad_sequences
 from keras.models import Sequential
-from keras.layers import Dense, Dropout
+from keras.layers import *
 from keras.layers import Flatten
 from keras.layers import Embedding
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
-# define documents
-docs = []
-labels = []
-max_length = -1
-char_level = False
-embedded_vector_length = 100
-with open('../data/EI-reg-en_anger_train.txt') as f:
-    for each_record in f:
-        record_tokens = each_record.split('\t')
-        content = record_tokens[1].lower()
-        docs.append(content)
-        seq = content if char_level else text_to_word_sequence(content,
-                                                                 '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
-                                                                 True,
-                                                                 ' ')
-        temp = len([w for w in seq])
-        if temp > max_length:
-            max_length = temp
-        labels.append(float(record_tokens[3][:-1]))
+from sklearn.metrics import mean_squared_error
+import sys
+import os
 
-docs, labels = shuffle(docs, labels)
-docs_train, doc_test, label_train, label_test = train_test_split(docs,
-                                                                 labels,
-                                                                 test_size=0.33,
-                                                                 random_state=42)
 
-# docs = ['Well done!',
-#         'Good work',
-#         'Great effort',
-#         'nice work',
-#         'Excellent!',
-#         'Weak',
-#         'Poor effort!',
-#         'not good',
-#         'poor work',
-#         'Could have done better.']
-# define class labels
-# prepare tokenizer
+def get_rnn_model(vocab_size,
+                  embedded_vector_length,
+                  embedding_matrix,
+                  max_length,
+                  optimizer='adam',
+                  loss='mean_squared_error',
+                  output_activation='relu'):
+    model = Sequential()
+    e = Embedding(vocab_size, embedded_vector_length, weights=[embedding_matrix], input_length=max_length, trainable=False)
+    model.add(e)
+    # model.add(Flatten())
+    model.add(LSTM(1000, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(10, activation='softmax'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1, activation=output_activation))
+    # compile the model
+    model.compile(optimizer=optimizer, loss=loss)
+    # summarize the model
+    print(model.summary())
+    return model
+    # fit the model
+
+
+def get_nn_model(vocab_size,
+                  embedded_vector_length,
+                  embedding_matrix,
+                  max_length,
+                  optimizer='adam',
+                  loss='mean_squared_error',
+                  output_activation='relu'):
+    model = Sequential()
+    e = Embedding(vocab_size, embedded_vector_length, weights=[embedding_matrix], input_length=max_length, trainable=False)
+    model.add(e)
+    model.add(Flatten())
+    model.add(Dense(1000, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(10, activation='softmax'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1, activation=output_activation))
+    # compile the model
+    model.compile(optimizer=optimizer, loss=loss)
+    # summarize the model
+    print(model.summary())
+    return model
+    # fit the model
+
+
+def get_embedding_index(embedding_file_name):
+    # load the whole embedding into memory
+    embeddings_index = dict()
+    # f = open('../resources/glove.6B/glove.6B.'+str(embedded_vector_length)+'d.txt')
+    with open(embedding_file_name) as f:
+        l_no = 0
+        for line in f:
+            if l_no == 0:
+                l_no += 1
+                continue
+            values = line.split()
+            word = values[0]
+            try:
+                coefs = asarray(values[1:], dtype='float32')
+            except ValueError as e:
+                print(line)
+                print(e)
+                coefs = asarray(values[-embedded_vector_length:], dtype='float32')
+
+            embeddings_index[word] = coefs
+    return  embeddings_index
+
 
 def get_padded_docs(docs):
-    t = Tokenizer()
+    t = Tokenizer(char_level=False)
     t.fit_on_texts(docs)
-    encoded_docs = t.texts_to_sequences(docs_train)
+    encoded_docs = t.texts_to_sequences(docs)
     padded_docs = pad_sequences(encoded_docs, maxlen=max_length, padding='post')
     return padded_docs, t
 
-padded_docs_train, t = get_padded_docs(docs_train)
-vocab_size = len(t.word_index) + 1
-# integer encode the documents
+def text_to_word_sequence(text,
+                          filters='',
+                          lower=True, split=" "):
+    """Converts a text to a sequence of words (or tokens).
 
-# pad documents to a max length of 4 words
+    # Arguments
+        text: Input text (string).
+        filters: Sequence of characters to filter out.
+        lower: Whether to convert the input to lowercase.
+        split: Sentence split marker (string).
 
-# load the whole embedding into memory
-embeddings_index = dict()
-f = open('../resources/glove.6B.100d.txt')
-for line in f:
-    values = line.split()
-    word = values[0]
-    coefs = asarray(values[1:], dtype='float32')
-    embeddings_index[word] = coefs
-    # print("Word: "+word+"\n\tEmbedding: "+str(embeddings_index))
-f.close()
-print('Loaded %s word vectors.' % len(embeddings_index))
-# create a weight matrix for words in training docs
-embedding_matrix = zeros((vocab_size, embedded_vector_length))
-for word, i in t.word_index.items():
-    embedding_vector = embeddings_index.get(word)
-    if embedding_vector is not None:
-        embedding_matrix[i] = embedding_vector
-# define model
-model = Sequential()
-e = Embedding(vocab_size, embedded_vector_length, weights=[embedding_matrix], input_length=max_length, trainable=False)
-model.add(e)
-model.add(Flatten())
-model.add(Dense(100, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(10, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(1, activation='softmax'))
-# compile the model
-model.compile(optimizer='adam', loss='mean_squared_error', metrics=['acc'])
-# summarize the model
-print(model.summary())
-# fit the model
-model.fit(padded_docs_train, label_train, epochs=2, verbose=0)
-# evaluate the model
-padded_docs_test, _ = get_padded_docs(doc_test)
-loss, accuracy = model.evaluate(padded_docs_test, label_test, verbose=0)
-print('Accuracy: %f' % (accuracy*100))
+    # Returns
+        A list of words (or tokens).
+    """
+    if lower:
+        text = text.lower()
+
+    if sys.version_info < (3,) and isinstance(text, bytes):
+        translate_map = dict((ord(c), bytes(split)) for c in filters)
+    else:
+        translate_map = maketrans(filters, split * len(filters))
+
+    text = text.translate(translate_map)
+    seq = text.split(split)
+    return [i for i in seq if i]
+
+if __name__ == '__main__':
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    char_level = False
+    docs = []
+    labels = []
+    max_length = -1
+    embedded_vector_length = 300
+    emotion = 'sadness'
+
+    with open(os.path.join(dir_path, '..','data','EI-reg-en_'+emotion+'_train.txt')) as f:
+        for each_record in f:
+            record_tokens = each_record.split('\t')
+            content = record_tokens[1].lower()
+            docs.append(content)
+            seq = content if char_level else text_to_word_sequence(content,
+                                                                     '',
+                                                                     True,
+                                                                     ' ')
+            temp = len([w for w in seq])
+            if temp > max_length:
+                max_length = temp
+            labels.append(float(record_tokens[3][:-1]))
+
+    docs, labels = shuffle(docs, labels)
+    docs_train, doc_test, label_train, label_test = train_test_split(docs,
+                                                                     labels,
+                                                                     test_size=0.33,
+                                                                     random_state=42)
+    embeddings_index = get_embedding_index(os.path.join(dir_path,
+                                                        '..',
+                                                        'resources',
+                                                        'glove.6B',
+                                                        'glove.6B.'+str(embedded_vector_length)+'d.txt'))
+    padded_docs_train, t = get_padded_docs(docs_train)
+    vocab_size = len(t.word_index) + 1
+
+    print('Loaded %s word vectors.' % len(embeddings_index))
+    embedding_matrix = zeros((vocab_size, embedded_vector_length))
+    for word, i in t.word_index.items():
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None:
+            embedding_matrix[i] = embedding_vector
+
+    # define model
+    model = get_rnn_model(vocab_size, embedded_vector_length, embedding_matrix, max_length)
+    model.fit(padded_docs_train, label_train, epochs=10, verbose=1)
+
+    # evaluate the model
+    padded_docs_test, _ = get_padded_docs(doc_test)
+    predicted_list = model.predict(padded_docs_test)
+    print(mean_squared_error(label_test, predicted_list))
