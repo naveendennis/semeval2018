@@ -211,9 +211,9 @@ if __name__ == '__main__':
         # dev set
         tweet_ids, docs, emotions, labels = get_docs_contents(
             os.path.join(dir_path, '..', 'data', 'en_dev', '2018-EI-reg-En-' + emotion + '-dev.txt'))
-        padded_docs_dev = get_padded_docs(docs)
+        padded_docs_dev, t = get_padded_docs(docs)
         predicted_list = model.predict(padded_docs_dev)
         predicted_list = [each[0] for each in predicted_list]
         write_to_file(tweet_ids, emotions, docs, predicted_list, emotion+'_'+embedding_name+'_dev')
 
-        print('Mean Squared Error of Validation Set: '+str(mean_squared_error(label_test, predicted_list)))
+        print('Mean Squared Error of Validation Set: '+str(mean_squared_error(labels, predicted_list)))
