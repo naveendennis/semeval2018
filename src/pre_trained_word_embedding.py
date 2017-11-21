@@ -84,15 +84,14 @@ def get_embedding_index(embedding_file_name):
             try:
                 coefs = asarray(values[1:], dtype='float32')
             except ValueError as e:
-                print(line)
-                print(e)
                 coefs = asarray(values[-embedded_vector_length:], dtype='float32')
-
-            embeddings_index[word] = coefs
+            if word not in embeddings_index.keys():
+                embeddings_index[word] = coefs
     return  embeddings_index
 
 
 def get_padded_docs(docs):
+    global max_length
     t = Tokenizer(char_level=False)
     t.fit_on_texts(docs)
     encoded_docs = t.texts_to_sequences(docs)
@@ -152,7 +151,7 @@ def get_docs_contents(file_name):
             docs.append(content)
             emotions.append(current_emotion)
             tweet_ids.append(tweet_id)
-            seq = content if char_level else text_to_word_sequence(content)
+            seq = content if char_level else text_to_word_sequence(content, filters='')
             temp = len([w for w in seq])
             if temp > max_length:
                 max_length = temp
@@ -169,17 +168,17 @@ if __name__ == '__main__':
     emotions = []
 
     embedded_vector_length = 300
-    emotion_names = ['sadness', 'joy', 'anger', 'sadness']
-    embedding_name = 'glove.6B'
+    emotion_names = ['sadness', 'joy', 'anger', 'fear']
+    embedding_name = 'wiki.es'
     embeddings_index = get_embedding_index(os.path.join(dir_path,
                                                         '..',
                                                         'resources',
                                                         embedding_name,
-                                                        'glove.6B.' + str(embedded_vector_length) + 'd.txt'))
+                                                        'wiki.es.vec'))
+                                                        # 'glove.6B.' + str(embedded_vector_length) + 'd.txt'))
     for emotion in emotion_names:
-        # emotion = 'sadness'
 
-        tweet_ids, docs, emotions, labels = get_docs_contents(os.path.join(dir_path, '..','data','EI-reg-en_'+emotion+'_train.txt'))
+        tweet_ids, docs, emotions, labels = get_docs_contents(os.path.join(dir_path, '..','data','es_train','2018-EI-reg-Es-'+emotion+'-train.txt'))
 
         tweet_ids, docs, emotions, labels = shuffle(tweet_ids, docs, emotions, labels)
         tweet_ids_train, tweet_ids_test, \
@@ -204,15 +203,16 @@ if __name__ == '__main__':
         # evaluate the model
         padded_docs_test, _ = get_padded_docs(doc_test)
         predicted_list = model.predict(padded_docs_test)
-        write_to_file(tweet_ids_test, emotions_test, doc_test, label_test, emotion + '_' + embedding_name+'_'+'truelabels')
+        write_to_file(tweet_ids_test, emotions_test, doc_test, label_test, emotion + '_' + embedding_name+'_val_labels')
         predicted_list = [each[0] for each in predicted_list]
         write_to_file(tweet_ids_test, emotions_test,  doc_test, predicted_list, emotion+'_'+embedding_name+'_validation')
 
         # dev set
         tweet_ids, docs, emotions, labels = get_docs_contents(
-            os.path.join(dir_path, '..', 'data', 'en_dev', '2018-EI-reg-En-' + emotion + '-dev.txt'))
+            os.path.join(dir_path, '..', 'data', 'es_dev', '2018-EI-reg-Es-' + emotion + '-dev.txt'))
         padded_docs_dev, t = get_padded_docs(docs)
         predicted_list = model.predict(padded_docs_dev)
+        write_to_file(tweet_ids, emotions, docs, labels, emotion + '_' + embedding_name + '_dev_labels')
         predicted_list = [each[0] for each in predicted_list]
         write_to_file(tweet_ids, emotions, docs, predicted_list, emotion+'_'+embedding_name+'_dev')
 
